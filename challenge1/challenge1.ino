@@ -1,63 +1,128 @@
-
 #include <Servo.h>
 
-#define S2 4
-#define S3 5
-#define sensorOut 6
+// Motor Control Pins
 #define MOTOR1_A 8
 #define MOTOR1_B 9
 #define MOTOR2_A 10
 #define MOTOR2_B 11
-#define SERVO_PIN 3
 
+// TCS230 Color Sensor Pins
+#define S0 2
+#define S1 3
+#define S2 4
+#define S3 5
+#define OUT_PIN A0
+
+// Flag Mechanism
+#define SERVO_PIN 12
 Servo flagServo;
-int red, green, blue;
+
+// Navigation State
+int ringCount = 0;
+bool flagDropped = false;
 
 void setup() {
-    Serial.begin(9600);
-    pinMode(S2, OUTPUT);
-    pinMode(S3, OUTPUT);
-    pinMode(sensorOut, INPUT);
+    // Initialize Motors
     pinMode(MOTOR1_A, OUTPUT);
     pinMode(MOTOR1_B, OUTPUT);
     pinMode(MOTOR2_A, OUTPUT);
     pinMode(MOTOR2_B, OUTPUT);
-   
+
+    // Configure Color Sensor
+    pinMode(S0, OUTPUT);
+    pinMode(S1, OUTPUT);
+    digitalWrite(S0, HIGH);  // 20% frequency scaling
+    digitalWrite(S1, LOW);
+
+    // Attach Flag Servo
     flagServo.attach(SERVO_PIN);
-    flagServo.write(0);
+    flagServo.write(0);  // Initial position: flag held
+
+    // Initial U-Turn (robot starts facing away from center)
+    digitalWrite(MOTOR1_A, HIGH);
+    digitalWrite(MOTOR1_B, LOW);
+    digitalWrite(MOTOR2_A, LOW);
+    digitalWrite(MOTOR2_B, HIGH);
+    delay(850);  // Calibrate for 180° turn
+    stopMotors();
+
+    Serial.begin(9600);
 }
 
 void loop() {
-    readColor();
-   
-    if (red > green && red > blue) {
-        Serial.println("Red detected, turning right");
-        moveRight();
-    } else if (green > red && green > blue) {
-        Serial.println("Green detected, going forward");
-        moveForward();
-    } else if (blue > red && blue > green) {
-        Serial.println("Blue detected, turning left");
-        moveLeft();
+    if(flagDropped) return;  // Stop after success
+
+    String color = detectColor();
+    Serial.print("Ring: "); Serial.print(ringCount);
+    Serial.print(" | Color: "); Serial.println(color);
+
+    // Center detection logic
+    if(ringCount >= 6 && color == "Blue") {
+        stopMotors();
+        flagServo.write(90);  // Drop flag
+        flagDropped = true;
+        while(1);  // Permanent stop
     }
 
-    if (atCenter()) {
-        dropFlag();
+    // New ring detected
+    if(color != "Unknown" && color != "White") {
+        ringCount++;
+        adjustPath(color);
+        delay(300);  // Stabilization pause
     }
+    
+    moveForward();
 }
 
-void readColor() {
-    digitalWrite(S2, LOW);
-    digitalWrite(S3, LOW);
-    red = pulseIn(sensorOut, LOW);
-   
-    digitalWrite(S2, HIGH);
-    digitalWrite(S3, HIGH);
-    green = pulseIn(sensorOut, LOW);
+//--------------------------------------------------
+// Color Detection (Threshold-Free)
+//--------------------------------------------------
+String detectColor() {
+    // Read raw RGB values
+    float red = pulseInWithFilter(LOW, LOW);    // Red filter
+    float green = pulseInWithFilter(HIGH, HIGH);// Green filter
+    float blue = pulseInWithFilter(LOW, HIGH);  // Blue filter
 
-    digitalWrite(S2, LOW);
-    digitalWrite(S3, HIGH);
-    blue = pulseIn(sensorOut, LOW);
+    // Normalize values
+    float total = red + green + blue;
+    float r = red/total;
+    float g = green/total;
+    float b = blue/total;
+
+    // Dynamic ratio-based detection
+    if(r > 0.4 && r > g && r > b) return "Red";
+    if(g > 0.4 && g > r && g > b) return "Green";
+    if(b > 0.4 && b > r && b > g) return "Blue";
+    return "Unknown";
+}
+
+float pulseInWithFilter(int s2, int s3) {
+    digitalWrite(S2, s2);
+    digitalWrite(S3, s3);
+    return pulseIn(OUT_PIN, LOW);  // Lower value = more light
+}
+
+//--------------------------------------------------
+// Movement Functions
+//--------------------------------------------------
+void adjustPath(String color) {
+    if(color == "Red") {
+        // Left turn to spiral inward
+        digitalWrite(MOTOR1_A, LOW);
+        digitalWrite(MOTOR1_B, HIGH);
+        digitalWrite(MOTOR2_A, HIGH);
+        digitalWrite(MOTOR2_B, LOW);
+        delay(280);  // Calibrate for ~30° turn
+    }
+    else if(color == "Green") {
+        // Right turn to spiral inward
+        digitalWrite(MOTOR1_A, HIGH);
+        digitalWrite(MOTOR1_B, LOW);
+        digitalWrite(MOTOR2_A, LOW);
+        digitalWrite(MOTOR2_B, HIGH);
+        delay(280);
+    }
+    stopMotors();
 }
 
 void moveForward() {
@@ -67,28 +132,9 @@ void moveForward() {
     digitalWrite(MOTOR2_B, LOW);
 }
 
-void moveLeft() {
+void stopMotors() {
     digitalWrite(MOTOR1_A, LOW);
-    digitalWrite(MOTOR1_B, HIGH);
-    digitalWrite(MOTOR2_A, HIGH);
-    digitalWrite(MOTOR2_B, LOW);
-}
-
-void moveRight() {
-    digitalWrite(MOTOR1_A, HIGH);
     digitalWrite(MOTOR1_B, LOW);
     digitalWrite(MOTOR2_A, LOW);
-    digitalWrite(MOTOR2_B, HIGH);
+    digitalWrite(MOTOR2_B, LOW);
 }
-
-bool atCenter() {
-    return (red > 200 && green > 200 && blue > 200);
-}
-
-void dropFlag() {
-    Serial.println("Dropping flag!");
-    flagServo.write(90);
-    delay(2000);
-    flagServo.write(0);
-}
-
