@@ -1,17 +1,18 @@
-#include <Servo.h>
+//#include <Servo.h>
+#include <stdlib.h>
 
-#define TRIG_PIN 7
-#define ECHO_PIN 6
+#define TRIG_PIN 0
+#define ECHO_PIN 1
 #define MOTOR1_A 8
 #define MOTOR1_B 9
 #define MOTOR2_A 10
 #define MOTOR2_B 11
 
 // Color Sensor Pins
-#define S0 2
-#define S1 3
-#define S2 4
-#define S3 5
+#define S0 A1
+#define S1 A2
+#define S2 A3
+#define S3 A4
 #define OUT_PIN A0
 #define MAXMIN_VARIANCE 200
 
@@ -44,7 +45,7 @@ void loop() {
     Serial.print(distance);
     Serial.println(" cm");
     
-    if (distance < 10) { // Wall detected
+    if (distance < 14) { // Wall detected
         Serial.println("Wall/Boundary detected");
         stopMotors();
         delay(500);
@@ -55,14 +56,19 @@ void loop() {
         Serial.println(color);
         
         if (color == "Red") {
-            uTurn();
+            // uTurn();
+            Serial.print("u-turn\n");
         } else if (color == "Green") {
-            turnRight();
+            // turnRight();
+            Serial.print("right turn\n");
         } else if (color == "Blue") {
-            turnLeft();
+            // turnLeft();
+            Serial.print("left turn\n");
         }
     } else {
-        moveForward();
+        // moveForward();
+        Serial.print("move forward\n");
+        delay(500);
     }
 }
 
