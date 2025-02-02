@@ -1,8 +1,13 @@
 // Motor Pins
-#define MOTOR1_A 8
-#define MOTOR1_B 9
-#define MOTOR2_A 10
-#define MOTOR2_B 11
+#define MOTOR1_IN1 6
+#define MOTOR1_IN2 7
+#define MOTOR2_IN1 9
+#define MOTOR2_IN2 8
+#define MOTOR1_ENA 5
+#define MOTOR2_ENB 10
+#define TRIG_PIN 0
+#define ECHO_PIN 1
+
 
 // Color Sensor Pins
 #define S0 A1
