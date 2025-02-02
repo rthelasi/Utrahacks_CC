@@ -1,4 +1,4 @@
-# Utrahacks_Capture_The_Flag
+# Utrahacks_CC
 Utrahacks 2025 programs for the Capture The Flag challenge
 Team Number: C4
 
