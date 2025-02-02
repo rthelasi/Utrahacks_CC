@@ -16,12 +16,11 @@ We've created a robot that enables us to complete 3 tasks given by UtraHack's cl
 - Pattern recognition
 
 Pin Location:
-#define MOTOR1_IN1 6
-#define MOTOR1_IN2 7
-#define MOTOR2_IN1 9
-#define MOTOR2_IN2 8
-#define MOTOR1_ENA 5
-#define MOTOR2_ENB 10
-
-#define TRIG_PIN 1
-#define ECHO_PIN 0
+- #define MOTOR1_IN1 6
+- #define MOTOR1_IN2 7
+- #define MOTOR2_IN1 9
+- #define MOTOR2_IN2 8
+- #define MOTOR1_ENA 5
+- #define MOTOR2_ENB 10
+- #define TRIG_PIN 1
+- #define ECHO_PIN 0
