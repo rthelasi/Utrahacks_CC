@@ -56,14 +56,14 @@ void loop() {
         Serial.println(color);
         
         if (color == "Red") {
-            // uTurn();
-            Serial.print("u-turn\n");
+            uTurn();
+            //Serial.print("u-turn\n");
         } else if (color == "Green") {
-            // turnRight();
-            Serial.print("right turn\n");
+            turnRight();
+            //Serial.print("right turn\n");
         } else if (color == "Blue") {
-            // turnLeft();
-            Serial.print("left turn\n");
+            turnLeft();
+            //Serial.print("left turn\n");
         }
     } else {
         // moveForward();
