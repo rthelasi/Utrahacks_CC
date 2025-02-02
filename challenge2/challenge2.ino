@@ -3,10 +3,12 @@
 
 #define TRIG_PIN 0
 #define ECHO_PIN 1
-#define MOTOR1_A 8
-#define MOTOR1_B 9
-#define MOTOR2_A 10
-#define MOTOR2_B 11
+#define MOTOR1_A 6
+#define MOTOR1_B 7
+#define MOTOR2_A 9
+#define MOTOR2_B 8
+#define MOTOR1_EN 5
+#define MOTOR2_EN 10
 
 // Color Sensor Pins
 #define S0 A1
@@ -21,6 +23,8 @@ int rFreq, gFreq, bFreq, maxFreq;
 void setup() {
     pinMode(TRIG_PIN, OUTPUT);
     pinMode(ECHO_PIN, INPUT);
+    pinMode(MOTOR1_EN, OUTPUT);
+    pinMode(MOTOR2_EN, OUTPUT);
     pinMode(MOTOR1_A, OUTPUT);
     pinMode(MOTOR1_B, OUTPUT);
     pinMode(MOTOR2_A, OUTPUT);
@@ -45,7 +49,7 @@ void loop() {
     Serial.print(distance);
     Serial.println(" cm");
     
-    if (distance < 14) { // Wall detected
+    if (distance < 30) { // Wall detected
         Serial.println("Wall/Boundary detected");
         stopMotors();
         delay(500);
@@ -56,18 +60,19 @@ void loop() {
         Serial.println(color);
         
         if (color == "Red") {
-            uTurn();
-            //Serial.print("u-turn\n");
+            turnRight();
+            turnRight();
+            Serial.print("u-turn\n");
         } else if (color == "Green") {
             turnRight();
-            //Serial.print("right turn\n");
+            Serial.print("right turn\n");
         } else if (color == "Blue") {
             turnLeft();
-            //Serial.print("left turn\n");
+            Serial.print("left turn\n");
         }
     } else {
-        // moveForward();
-        Serial.print("move forward\n");
+        moveForward();
+        Serial.print("move forward1\n");
         delay(500);
     }
 }
@@ -119,6 +124,8 @@ void stopMotors() {
     digitalWrite(MOTOR1_B, LOW);
     digitalWrite(MOTOR2_A, LOW);
     digitalWrite(MOTOR2_B, LOW);
+    analogWrite(MOTOR1_EN, 0);
+    analogWrite(MOTOR2_EN, 0);
 }
 
 void moveForward() {
@@ -126,6 +133,8 @@ void moveForward() {
     digitalWrite(MOTOR1_B, LOW);
     digitalWrite(MOTOR2_A, HIGH);
     digitalWrite(MOTOR2_B, LOW);
+    analogWrite(MOTOR1_EN, 150);
+    analogWrite(MOTOR2_EN, 150);
 }
 
 void turnRight() {
@@ -134,7 +143,9 @@ void turnRight() {
     digitalWrite(MOTOR1_B, LOW);
     digitalWrite(MOTOR2_A, LOW);
     digitalWrite(MOTOR2_B, HIGH);
-    delay(400); // Adjust based on motor speed
+    analogWrite(MOTOR1_EN, 150);
+    analogWrite(MOTOR2_EN, 150);
+    delay(900); // Adjust based on motor speed
     stopMotors();
 }
 
@@ -144,16 +155,8 @@ void turnLeft() {
     digitalWrite(MOTOR1_B, HIGH);
     digitalWrite(MOTOR2_A, HIGH);
     digitalWrite(MOTOR2_B, LOW);
-    delay(400); // Adjust based on motor speed
-    stopMotors();
-}
-
-void uTurn() {
-    // Perform a 180-degree turn (calibrate delay as needed)
-    digitalWrite(MOTOR1_A, LOW);
-    digitalWrite(MOTOR1_B, HIGH);
-    digitalWrite(MOTOR2_A, HIGH);
-    digitalWrite(MOTOR2_B, LOW);
-    delay(800); // Adjust based on motor speed for 180-degree turn
+    analogWrite(MOTOR1_EN, 150);
+    analogWrite(MOTOR2_EN, 150);
+    delay(900); // Adjust based on motor speed
     stopMotors();
 }
