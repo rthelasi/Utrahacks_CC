@@ -124,23 +124,29 @@ void loop() {
   // Once a color gets detected:
   String prevColour = "Black";
   moveForward();
+  int numColourChange = 0;
   while (currColour != prevColour) {
     String tempColour = detectColor();
+    if (tempColour == "Black") {
+        break;
+    }
     delay(200);
     if (tempColour != currColour) {
-      if (tempColour == prevColour) {
+      numColourChange += 1;
+      currColour = tempColour;
+      if (tempColour == prevColour && numColourChange > 2) {
         prevColour = currColour;
       }
     }
   }
-  stopMotors();
-  delay(200);
-  turnRight();
-  turnRight();
-  claw.write(0);
-  
-  // infinite loop to end execution
-  while(1) {
-
+  if (prevColour == currColour) {
+      stopMotors();
+      delay(200);
+      turnRight();
+      turnRight();
+      claw.write(0);
+      while(1) {
+          // infinite loop to end execution
+      }
   }
 }
