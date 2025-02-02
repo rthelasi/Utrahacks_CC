@@ -13,12 +13,9 @@
 #define S2 4
 #define S3 5
 #define OUT_PIN A0
+#define MAXMIN_VARIANCE 200
 
-// Color Definitions (Calibrate these values based on your environment)
-#define RED_THRESHOLD 150
-#define GREEN_THRESHOLD 150
-#define BLUE_THRESHOLD 150
-#define ORANGE_THRESHOLD 150
+int rFreq, gFreq, bFreq, maxFreq;
 
 void setup() {
     pinMode(TRIG_PIN, OUTPUT);
@@ -55,13 +52,10 @@ void loop() {
         Serial.println(color);
         
         if (color == "Red") {
-            turnRight();
+            uTurn();
         } else if (color == "Green") {
             turnLeft();
         } else if (color == "Blue") {
-            uTurn();
-        } else {
-            // Default action if color not recognized
             turnRight();
         }
     } else {
@@ -69,7 +63,37 @@ void loop() {
     }
 }
 
-// Ultrasonic Sensor Distance Measurement
+String detectColor() {
+    // Setting red filtered photodiodes to be read
+    digitalWrite(S2, LOW);
+    digitalWrite(S3, LOW);
+    rFreq = pulseIn(OUT_PIN, LOW);
+    rFreq = map(rFreq, 500 - MAXMIN_VARIANCE, 950 + MAXMIN_VARIANCE, 255, 0);
+
+    // Setting green filtered photodiodes to be read
+    digitalWrite(S2, HIGH);
+    digitalWrite(S3, HIGH);
+    gFreq = pulseIn(OUT_PIN, LOW);
+    gFreq = map(gFreq, 500 - MAXMIN_VARIANCE, 900 + MAXMIN_VARIANCE, 255, 0);
+
+    // Setting blue filtered photodiodes to be read
+    digitalWrite(S2, LOW);
+    digitalWrite(S3, HIGH);
+    bFreq = pulseIn(OUT_PIN, LOW);
+    bFreq = map(bFreq, 600 - MAXMIN_VARIANCE, 930 + MAXMIN_VARIANCE, 255, 0);
+
+    maxFreq = max(rFreq, max(bFreq, gFreq));
+    if (maxFreq <= 0) {
+        return "Black";
+    } else if (maxFreq == rFreq) {
+        return "Red";
+    } else if (maxFreq == gFreq) {
+        return "Green";
+    } else {
+        return "Blue";
+    }
+}
+
 int getDistance() {
     digitalWrite(TRIG_PIN, LOW);
     delayMicroseconds(2);
@@ -81,32 +105,13 @@ int getDistance() {
     return duration * 0.034 / 2;
 }
 
-// Color Detection Function
-String detectColor() {
-    // Detect Red
-    digitalWrite(S2, LOW);
-    digitalWrite(S3, LOW);
-    int red = pulseIn(OUT_PIN, LOW);
-    
-    // Detect Green
-    digitalWrite(S2, HIGH);
-    digitalWrite(S3, HIGH);
-    int green = pulseIn(OUT_PIN, LOW);
-    
-    // Detect Blue
-    digitalWrite(S2, LOW);
-    digitalWrite(S3, HIGH);
-    int blue = pulseIn(OUT_PIN, LOW);
-    
-    // Determine dominant color (calibration needed)
-    if (red < RED_THRESHOLD && green > GREEN_THRESHOLD && blue > BLUE_THRESHOLD) return "Red";
-    if (green < GREEN_THRESHOLD && red > RED_THRESHOLD && blue > BLUE_THRESHOLD) return "Green";
-    if (blue < BLUE_THRESHOLD && red > RED_THRESHOLD && green > GREEN_THRESHOLD) return "Blue";
-    if (red < ORANGE_THRESHOLD && green < ORANGE_THRESHOLD) return "Orange"; // Example for orange
-    return "Unknown";
+void stopMotors() {
+    digitalWrite(MOTOR1_A, LOW);
+    digitalWrite(MOTOR1_B, LOW);
+    digitalWrite(MOTOR2_A, LOW);
+    digitalWrite(MOTOR2_B, LOW);
 }
 
-// Motor Control Functions
 void moveForward() {
     digitalWrite(MOTOR1_A, HIGH);
     digitalWrite(MOTOR1_B, LOW);
@@ -130,20 +135,16 @@ void turnLeft() {
     digitalWrite(MOTOR1_B, HIGH);
     digitalWrite(MOTOR2_A, HIGH);
     digitalWrite(MOTOR2_B, LOW);
-    delay(400);
+    delay(400); // Adjust based on motor speed
     stopMotors();
 }
 
 void uTurn() {
-    // Perform a 180-degree turn
-    turnLeft();
-    delay(400); // Additional delay for full U-turn
-    turnLeft();
-}
-
-void stopMotors() {
+    // Perform a 180-degree turn (calibrate delay as needed)
     digitalWrite(MOTOR1_A, LOW);
-    digitalWrite(MOTOR1_B, LOW);
-    digitalWrite(MOTOR2_A, LOW);
+    digitalWrite(MOTOR1_B, HIGH);
+    digitalWrite(MOTOR2_A, HIGH);
     digitalWrite(MOTOR2_B, LOW);
+    delay(800); // Adjust based on motor speed for 180-degree turn
+    stopMotors();
 }
