@@ -40,6 +40,9 @@ void setup() {
 
 void loop() {
     int distance = getDistance();
+    Serial.print("Distance: ");
+    Serial.print(distance);
+    Serial.println(" cm");
     
     if (distance < 10) { // Wall detected
         Serial.println("Wall/Boundary detected");
@@ -54,9 +57,9 @@ void loop() {
         if (color == "Red") {
             uTurn();
         } else if (color == "Green") {
-            turnLeft();
-        } else if (color == "Blue") {
             turnRight();
+        } else if (color == "Blue") {
+            turnLeft();
         }
     } else {
         moveForward();

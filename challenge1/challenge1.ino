@@ -1,128 +1,124 @@
-#include <Servo.h>
+//#include <Servo.h>
+#include <stdlib.h>
 
-// Motor Control Pins
+#define TRIG_PIN 0
+#define ECHO_PIN 1
 #define MOTOR1_A 8
 #define MOTOR1_B 9
 #define MOTOR2_A 10
 #define MOTOR2_B 11
 
-// TCS230 Color Sensor Pins
-#define S0 2
-#define S1 3
-#define S2 4
-#define S3 5
+// Color Sensor Pins
+#define S0 A1
+#define S1 A2
+#define S2 A3
+#define S3 A4
 #define OUT_PIN A0
+#define MAXMIN_VARIANCE 200
 
-// Flag Mechanism
-#define SERVO_PIN 12
-Servo flagServo;
-
-// Navigation State
-int ringCount = 0;
-bool flagDropped = false;
+int rFreq, gFreq, bFreq, maxFreq;
 
 void setup() {
-    // Initialize Motors
+    pinMode(TRIG_PIN, OUTPUT);
+    pinMode(ECHO_PIN, INPUT);
     pinMode(MOTOR1_A, OUTPUT);
     pinMode(MOTOR1_B, OUTPUT);
     pinMode(MOTOR2_A, OUTPUT);
     pinMode(MOTOR2_B, OUTPUT);
-
-    // Configure Color Sensor
+    
+    // Color Sensor Setup
     pinMode(S0, OUTPUT);
     pinMode(S1, OUTPUT);
-    digitalWrite(S0, HIGH);  // 20% frequency scaling
+    pinMode(S2, OUTPUT);
+    pinMode(S3, OUTPUT);
+    pinMode(OUT_PIN, INPUT);
+    // Set frequency scaling to 20%
+    digitalWrite(S0, HIGH);
     digitalWrite(S1, LOW);
-
-    // Attach Flag Servo
-    flagServo.attach(SERVO_PIN);
-    flagServo.write(0);  // Initial position: flag held
-
-    // Initial U-Turn (robot starts facing away from center)
-    digitalWrite(MOTOR1_A, HIGH);
-    digitalWrite(MOTOR1_B, LOW);
-    digitalWrite(MOTOR2_A, LOW);
-    digitalWrite(MOTOR2_B, HIGH);
-    delay(850);  // Calibrate for 180° turn
-    stopMotors();
-
+    
     Serial.begin(9600);
 }
 
 void loop() {
-    if(flagDropped) return;  // Stop after success
-
-    String color = detectColor();
-    Serial.print("Ring: "); Serial.print(ringCount);
-    Serial.print(" | Color: "); Serial.println(color);
-
-    // Center detection logic
-    if(ringCount >= 6 && color == "Blue") {
-        stopMotors();
-        flagServo.write(90);  // Drop flag
-        flagDropped = true;
-        while(1);  // Permanent stop
-    }
-
-    // New ring detected
-    if(color != "Unknown" && color != "White") {
-        ringCount++;
-        adjustPath(color);
-        delay(300);  // Stabilization pause
-    }
+    int distance = getDistance();
+    Serial.print("Distance: ");
+    Serial.print(distance);
+    Serial.println(" cm");
     
-    moveForward();
+    if (distance < 14) { // Wall detected
+        Serial.println("Wall/Boundary detected");
+        stopMotors();
+        delay(500);
+        
+        // Read color and perform action
+        String color = detectColor();
+        Serial.print("Detected Color: ");
+        Serial.println(color);
+        
+        if (color == "Red") {
+            // uTurn();
+            Serial.print("u-turn\n");
+        } else if (color == "Green") {
+            // turnRight();
+            Serial.print("right turn\n");
+        } else if (color == "Blue") {
+            // turnLeft();
+            Serial.print("left turn\n");
+        }
+    } else {
+        // moveForward();
+        Serial.print("move forward\n");
+        delay(500);
+    }
 }
 
-//--------------------------------------------------
-// Color Detection (Threshold-Free)
-//--------------------------------------------------
 String detectColor() {
-    // Read raw RGB values
-    float red = pulseInWithFilter(LOW, LOW);    // Red filter
-    float green = pulseInWithFilter(HIGH, HIGH);// Green filter
-    float blue = pulseInWithFilter(LOW, HIGH);  // Blue filter
+    // Setting red filtered photodiodes to be read
+    digitalWrite(S2, LOW);
+    digitalWrite(S3, LOW);
+    rFreq = pulseIn(OUT_PIN, LOW);
+    rFreq = map(rFreq, 500 - MAXMIN_VARIANCE, 950 + MAXMIN_VARIANCE, 255, 0);
 
-    // Normalize values
-    float total = red + green + blue;
-    float r = red/total;
-    float g = green/total;
-    float b = blue/total;
+    // Setting green filtered photodiodes to be read
+    digitalWrite(S2, HIGH);
+    digitalWrite(S3, HIGH);
+    gFreq = pulseIn(OUT_PIN, LOW);
+    gFreq = map(gFreq, 500 - MAXMIN_VARIANCE, 900 + MAXMIN_VARIANCE, 255, 0);
 
-    // Dynamic ratio-based detection
-    if(r > 0.4 && r > g && r > b) return "Red";
-    if(g > 0.4 && g > r && g > b) return "Green";
-    if(b > 0.4 && b > r && b > g) return "Blue";
-    return "Unknown";
+    // Setting blue filtered photodiodes to be read
+    digitalWrite(S2, LOW);
+    digitalWrite(S3, HIGH);
+    bFreq = pulseIn(OUT_PIN, LOW);
+    bFreq = map(bFreq, 600 - MAXMIN_VARIANCE, 930 + MAXMIN_VARIANCE, 255, 0);
+
+    maxFreq = max(rFreq, max(bFreq, gFreq));
+    if (maxFreq <= 0) {
+        return "Black";
+    } else if (maxFreq == rFreq) {
+        return "Red";
+    } else if (maxFreq == gFreq) {
+        return "Green";
+    } else {
+        return "Blue";
+    }
 }
 
-float pulseInWithFilter(int s2, int s3) {
-    digitalWrite(S2, s2);
-    digitalWrite(S3, s3);
-    return pulseIn(OUT_PIN, LOW);  // Lower value = more light
+int getDistance() {
+    digitalWrite(TRIG_PIN, LOW);
+    delayMicroseconds(2);
+    digitalWrite(TRIG_PIN, HIGH);
+    delayMicroseconds(10);
+    digitalWrite(TRIG_PIN, LOW);
+    
+    int duration = pulseIn(ECHO_PIN, HIGH);
+    return duration * 0.034 / 2;
 }
 
-//--------------------------------------------------
-// Movement Functions
-//--------------------------------------------------
-void adjustPath(String color) {
-    if(color == "Red") {
-        // Left turn to spiral inward
-        digitalWrite(MOTOR1_A, LOW);
-        digitalWrite(MOTOR1_B, HIGH);
-        digitalWrite(MOTOR2_A, HIGH);
-        digitalWrite(MOTOR2_B, LOW);
-        delay(280);  // Calibrate for ~30° turn
-    }
-    else if(color == "Green") {
-        // Right turn to spiral inward
-        digitalWrite(MOTOR1_A, HIGH);
-        digitalWrite(MOTOR1_B, LOW);
-        digitalWrite(MOTOR2_A, LOW);
-        digitalWrite(MOTOR2_B, HIGH);
-        delay(280);
-    }
-    stopMotors();
+void stopMotors() {
+    digitalWrite(MOTOR1_A, LOW);
+    digitalWrite(MOTOR1_B, LOW);
+    digitalWrite(MOTOR2_A, LOW);
+    digitalWrite(MOTOR2_B, LOW);
 }
 
 void moveForward() {
@@ -132,9 +128,32 @@ void moveForward() {
     digitalWrite(MOTOR2_B, LOW);
 }
 
-void stopMotors() {
-    digitalWrite(MOTOR1_A, LOW);
+void turnRight() {
+    // Turn 90 degrees (calibrate delay as needed)
+    digitalWrite(MOTOR1_A, HIGH);
     digitalWrite(MOTOR1_B, LOW);
     digitalWrite(MOTOR2_A, LOW);
+    digitalWrite(MOTOR2_B, HIGH);
+    delay(400); // Adjust based on motor speed
+    stopMotors();
+}
+
+void turnLeft() {
+    // Turn 90 degrees
+    digitalWrite(MOTOR1_A, LOW);
+    digitalWrite(MOTOR1_B, HIGH);
+    digitalWrite(MOTOR2_A, HIGH);
     digitalWrite(MOTOR2_B, LOW);
+    delay(400); // Adjust based on motor speed
+    stopMotors();
+}
+
+void uTurn() {
+    // Perform a 180-degree turn (calibrate delay as needed)
+    digitalWrite(MOTOR1_A, LOW);
+    digitalWrite(MOTOR1_B, HIGH);
+    digitalWrite(MOTOR2_A, HIGH);
+    digitalWrite(MOTOR2_B, LOW);
+    delay(800); // Adjust based on motor speed for 180-degree turn
+    stopMotors();
 }
