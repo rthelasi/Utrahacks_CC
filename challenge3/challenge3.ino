@@ -5,29 +5,42 @@
 #define MOTOR2_B 11
 
 // Color Sensor Pins
-#define S0 2
-#define S1 3
-#define S2 4
-#define S3 5
-#define OUT_PIN A0
+#define S0 A1
+#define S1 A2
+#define S2 A3
+#define S3 A4
+#define sensorOut A0
+#define MAXMIN_VARIANCE 200
 
 // Ultrasonic Sensor
 #define TRIG_PIN 7
 #define ECHO_PIN 6
 
 // LED
-#define LED_PIN A1
+#define LED_PIN A5
 
 // Sequence Tracking
 String targetSequence[] = {"Red", "Green", "Blue", "Green", "Blue"};
 int sequenceStep = 0;
-String lastGreenID = "";
-String lastBlueID = "";
 
-// Color Detection Thresholds (CALIBRATE THESE!)
-int redMin = 25, redMax = 85;
-int greenMin = 30, greenMax = 90;
-int blueMin = 20, blueMax = 70;
+// Position Tracking
+struct Position {
+    int x;
+    int y;
+};
+Position robotPos = {0, 0}; // Starting position
+Position lastGreenPos = {-1, -1}; // Track last unique green
+Position lastBluePos = {-1, -1};  // Track last unique blue
+
+// Color Sensor Variables
+int gFreq, rFreq, bFreq, maxFreq;
+
+// Movement history to detect loops
+Position movementHistory[100]; 
+int movementCount = 0;
+
+// Wall detection tracking
+int consecutiveWallHits = 0;
 
 void setup() {
     // Motor Setup
@@ -43,6 +56,10 @@ void setup() {
     // Color Sensor
     pinMode(S0, OUTPUT);
     pinMode(S1, OUTPUT);
+    pinMode(S2, OUTPUT);
+    pinMode(S3, OUTPUT);
+    pinMode(sensorOut, INPUT);
+
     digitalWrite(S0, HIGH);  // 20% frequency scaling
     digitalWrite(S1, LOW);
     
@@ -57,41 +74,59 @@ void loop() {
     if (distance < 10) {
         avoidWall();
     } else {
+        moveForward();
+        updatePosition();
+
+        // If stuck in a loop, trigger pathfinding
+        if (isLooping()) {
+            Serial.println("Loop detected! Switching path.");
+            avoidWall();
+        }
+
         String color = detectColor();
         checkSequence(color);
-        moveForward();
     }
 }
 
 //----- Color Detection Functions -----//
 String detectColor() {
-    int red = readColor('R');
-    int green = readColor('G');
-    int blue = readColor('B');
+    // Read Red Frequency
+    digitalWrite(S2, LOW);
+    digitalWrite(S3, LOW);
+    rFreq = pulseIn(sensorOut, LOW);
+    rFreq = map(rFreq, 500 - MAXMIN_VARIANCE, 950 + MAXMIN_VARIANCE, 255, 0);
 
-    Serial.print("R:"); Serial.print(red);
-    Serial.print(" G:"); Serial.print(green);
-    Serial.print(" B:"); Serial.println(blue);
+    // Read Green Frequency
+    digitalWrite(S2, HIGH);
+    digitalWrite(S3, HIGH);
+    gFreq = pulseIn(sensorOut, LOW);
+    gFreq = map(gFreq, 500 - MAXMIN_VARIANCE, 900 + MAXMIN_VARIANCE, 255, 0);
 
-    if (red > green && red > blue && red >= redMin && red <= redMax) return "Red";
-    if (green > red && green > blue && green >= greenMin && green <= greenMax) return "Green";
-    if (blue > red && blue > green && blue >= blueMin && blue <= blueMax) return "Blue";
-    return "Unknown";
-}
+    // Read Blue Frequency
+    digitalWrite(S2, LOW);
+    digitalWrite(S3, HIGH);
+    bFreq = pulseIn(sensorOut, LOW);
+    bFreq = map(bFreq, 600 - MAXMIN_VARIANCE, 930 + MAXMIN_VARIANCE, 255, 0);
 
-int readColor(char color) {
-    switch(color) {
-        case 'R':
-            digitalWrite(S2, LOW); digitalWrite(S3, LOW);
-            break;
-        case 'G':
-            digitalWrite(S2, HIGH); digitalWrite(S3, HIGH);
-            break;
-        case 'B':
-            digitalWrite(S2, LOW); digitalWrite(S3, HIGH);
-            break;
+    Serial.print("R="); Serial.print(rFreq);
+    Serial.print(" G="); Serial.print(gFreq);
+    Serial.print(" B="); Serial.println(bFreq);
+
+    maxFreq = max(rFreq, max(bFreq, gFreq));
+
+    if (maxFreq <= 0) {
+        Serial.println("(black)");
+        return "Unknown";
+    } else if (maxFreq == rFreq) {
+        Serial.println("(red)");
+        return "Red";
+    } else if (maxFreq == gFreq) {
+        Serial.println("(green)");
+        return "Green";
+    } else {
+        Serial.println("(blue)");
+        return "Blue";
     }
-    return pulseIn(OUT_PIN, LOW);
 }
 
 //----- Motor Control Functions -----//
@@ -109,45 +144,73 @@ void stopMotors() {
     digitalWrite(MOTOR2_B, LOW);
 }
 
-//----- Core Logic -----//
+//----- Position Tracking -----//
+void updatePosition() {
+    robotPos.x += 1; // Move forward in X direction (adjust for real movement)
+    
+    // Save the new position in movement history
+    movementHistory[movementCount++] = robotPos;
+}
+
+//----- Pathfinding & Obstacle Handling -----//
 void avoidWall() {
     stopMotors();
     delay(500);
-    // Right turn
-    digitalWrite(MOTOR1_A, HIGH);
-    digitalWrite(MOTOR1_B, LOW);
-    digitalWrite(MOTOR2_A, LOW);
-    digitalWrite(MOTOR2_B, HIGH);
-    delay(400);  // Adjust for 90° turn
-    stopMotors();
+    
+    consecutiveWallHits++;
+
+    if (consecutiveWallHits > 3) { // If stuck, pick a random turn
+        int turnDirection = random(0, 2); // Randomly choose left or right
+        if (turnDirection == 0) {
+            turnLeft();
+        } else {
+            turnRight();
+        }
+    } else {
+        turnRight();
+    }
+    
+    consecutiveWallHits = 0; // Reset after a turn
 }
 
-void checkSequence(String color) {
-    if (color == targetSequence[sequenceStep]) {
-        if ((sequenceStep == 3 || sequenceStep == 4) && !validateUnique(color)) return;
-        
-        blinkLED();
-        sequenceStep++;
-        if (sequenceStep >= 5) {
-            stopMotors();
-            while(1); // Mission complete
+//----- Check for Duplicates -----//
+bool isDuplicateColor(String color, Position pos) {
+    if ((color == "Green" && pos.x == lastGreenPos.x && pos.y == lastGreenPos.y) ||
+        (color == "Blue" && pos.x == lastBluePos.x && pos.y == lastBluePos.y)) {
+        return true;
+    }
+    return false;
+}
+
+//----- Check for Loops -----//
+bool isLooping() {
+    int count = 0;
+    for (int i = 0; i < movementCount; i++) {
+        if (movementHistory[i].x == robotPos.x && movementHistory[i].y == robotPos.y) {
+            count++;
+            if (count > 3) return true;
         }
     }
+    return false;
 }
 
-bool validateUnique(String color) {
-    String currentID = String(millis()); // Unique timestamp ID
-    
-    if (sequenceStep == 3 && color == "Green") {
-        if (currentID == lastGreenID) return false;
-        lastGreenID = currentID;
+//----- Check Sequence & Validate Unique Colors -----//
+void checkSequence(String color) {
+    if (color == targetSequence[sequenceStep]) {
+        if (isDuplicateColor(color, robotPos)) return;
+
+        blinkLED();
+        
+        if (color == "Green") lastGreenPos = robotPos;
+        if (color == "Blue") lastBluePos = robotPos;
+
+        sequenceStep++;
+        
+        if (sequenceStep >= 5) {
+            stopMotors();
+            while(1);
+        }
     }
-    
-    if (sequenceStep == 4 && color == "Blue") {
-        if (currentID == lastBlueID) return false;
-        lastBlueID = currentID;
-    }
-    return true;
 }
 
 //----- Utilities -----//
@@ -164,4 +227,23 @@ void blinkLED() {
     digitalWrite(LED_PIN, HIGH);
     delay(200);
     digitalWrite(LED_PIN, LOW);
+}
+
+//----- Turning Functions -----//
+void turnRight() {
+    digitalWrite(MOTOR1_A, HIGH);
+    digitalWrite(MOTOR1_B, LOW);
+    digitalWrite(MOTOR2_A, LOW);
+    digitalWrite(MOTOR2_B, HIGH);
+    delay(500);
+    stopMotors();
+}
+
+void turnLeft() {
+    digitalWrite(MOTOR1_A, LOW);
+    digitalWrite(MOTOR1_B, HIGH);
+    digitalWrite(MOTOR2_A, HIGH);
+    digitalWrite(MOTOR2_B, LOW);
+    delay(500);
+    stopMotors();
 }
